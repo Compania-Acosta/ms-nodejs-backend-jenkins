@@ -1,4 +1,15 @@
 pipeline {
+
+parameters {
+    choice(
+        name: 'DEPLOY_ENV',
+        choices: ['dev', 'qa', 'prd'],
+        description: 'Selecciona el ambiente de despliegue'
+    )
+}
+
+
+
     agent {
         docker { image 'devops-agent:latest' }
     }
@@ -95,19 +106,28 @@ pipeline {
             }
         }
 
-        stage('[CD-DEV] Set Image Tag in k8s.yml') {
+        stage('[CD] Deploy to AKS') {
             steps {
                 script { 
-                    // Declarar más variables de entorno
-                    env.API_PROVIDER_URL = "https://dev.api.com"
-                    env.ENV = "dev"
+                    env.ENV = params.DEPLOY_ENV
+
+                    if (params.DEPLOY_ENV == "dev") {
+                        env.API_PROVIDER_URL = "https://dev.api.com"
+                    }
+                    if (params.DEPLOY_ENV == "qa") {
+                        env.API_PROVIDER_URL = "https://qa.api.com"
+                    }
+                    if (params.DEPLOY_ENV == "prd") {
+                        env.API_PROVIDER_URL = "https://api.com"
+                    }
+                
                 }
 
                 sh '''
                   echo ">>> Renderizando k8s.yml..."
                   
-                  envsubst < k8s.yml > k8s-dev.yml
-                  cat k8s-dev.yml
+                    envsubst < k8s.yml > k8s-${ENV}.yml
+                    cat k8s-${ENV}.yml
 
                 '''
             }
@@ -119,7 +139,7 @@ pipeline {
                 az aks command invoke \
                   --resource-group $RESOURCE_GROUP \
                   --name $AKS_NAME \
-                  --command "kubectl apply -f k8s-dev.yml" \
+                  --command "kubectl apply -f k8s-${ENV}.yml" \
                   --file k8s-dev.yml
 
             '''
